@@ -1,0 +1,12 @@
+{
+  "actual_engine": "Newton 1.5.1",
+  "actual_solver": "VBD",
+  "ratio_magnitude": 29.008914599234508,
+  "ideal_ratio_magnitude": 29,
+  "ratio_slope_relative_error": 0.00030730550789870303,
+  "refinement_output_angle_difference_deg": 0.01550495630275207,
+  "ring_contact_disabled_output_deg": 13.513947621956891,
+  "contact_enabled_output_deg_at_3s": -4.329726497423253,
+  "all_tets_positive": true,
+  "contact_ablation_reverses_output_direction": true
+}

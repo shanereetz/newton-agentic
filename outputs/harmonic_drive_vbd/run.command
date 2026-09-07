@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+cd "$(dirname "$0")"
+if [ ! -x .venv/bin/python ]; then
+  python3 -m venv .venv
+  .venv/bin/python -m pip install -r requirements.txt
+fi
+.venv/bin/python simulate.py --duration 7.1
+.venv/bin/python build_viewer.py
+open replay.html

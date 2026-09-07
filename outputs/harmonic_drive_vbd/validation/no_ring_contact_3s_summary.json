@@ -1,0 +1,26 @@
+{
+  "engine": "Newton 1.5.1",
+  "solver": "VBD",
+  "wall_seconds": 22.31535005569458,
+  "particles": 928,
+  "tetrahedra": 1392,
+  "max_penetration_mm": 0.06649699807167053,
+  "min_volume_ratio": 0.9809677004814148,
+  "peak_ring_contacts": 0,
+  "peak_cam_contacts": 252,
+  "final": {
+    "time_s": 3.000000000000044,
+    "input_rad": 2.2500113499824845,
+    "output_rad": 0.2358628809452057,
+    "ring_contacts": 0,
+    "cam_contacts": 29,
+    "max_penetration_mm": 1.7274942365475e-05,
+    "min_volume_ratio": 0.9942576885223389,
+    "max_volume_ratio": 1.0057992935180664,
+    "max_contact_penalty_N": 0.001727494178339839,
+    "center_drift_mm": 0.0005137281259521842
+  },
+  "steady_max_penetration_mm": 0.00012136479199398309,
+  "measured_output_per_input": 0.10392652983951481,
+  "ideal_output_per_input": -0.034482758620689655
+}
