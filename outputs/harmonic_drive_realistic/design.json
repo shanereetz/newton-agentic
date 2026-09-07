@@ -1,0 +1,19 @@
+{
+  "module": 0.0009,
+  "flex_teeth": 58,
+  "circular_teeth": 60,
+  "pressure_angle": 20.0,
+  "backlash": 4e-05,
+  "wall": 0.0004,
+  "cup_depth": 0.025,
+  "face_width": 0.004,
+  "hub_radius": 0.008,
+  "outside_radius": 0.034,
+  "young": 206000000000.0,
+  "poisson": 0.3,
+  "density": 7850.0,
+  "friction_teeth": 0.05,
+  "friction_bearing": 0.002,
+  "normal_penalty": 200000000000000.0,
+  "output_torque": 0.1
+}

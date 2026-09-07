@@ -1,0 +1,4 @@
+-r requirements.txt
+pyglet==2.1.16
+imgui-bundle==1.92.900
+PyOpenGL==3.1.10
