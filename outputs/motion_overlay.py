@@ -65,7 +65,7 @@ class MotionOverlay:
         line(marker, [marker[0],marker[1],z], (1.,.2,.7))
         arr = lambda data: wp.array(np.asarray(data,dtype=np.float32),dtype=wp.vec3,device=self.device)
         viewer.log_lines('Motion: white fixed / amber input / cyan output',arr(starts),arr(ends),arr(colors))
-        viewer.log_points('Pink: same flexspline material point',arr([marker]),radii=.0008,colors=(1.,.2,.7))
+        viewer.log_points('Pink: same flexspline material point',arr([marker]),radii=.0008,colors=arr([(1.,.2,.7)]))
         viewer.log_scalar('Fixed circular spline (deg)',0.)
         viewer.log_scalar('Flexspline output vs fixed ring (deg)',math.degrees(self.output))
         viewer.log_scalar('Input vs flexspline output (deg)',math.degrees(input_angle-self.output))
