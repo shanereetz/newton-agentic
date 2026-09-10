@@ -24,6 +24,7 @@ def main():
     _patch_pyglet_x11_primary_screen()
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--device',default='cpu')
+    parser.add_argument('--cam-minor',type=float,default=.0228,help='Rigid cam minor semiaxis in metres')
     parser.add_argument('--speed',type=float,default=1.)
     parser.add_argument('--paused',action='store_true')
     parser.add_argument('--top-view',action='store_true',help='Look down the shaft to compare rotation pointers')
@@ -47,7 +48,7 @@ def main():
     if args.top_view:
         viewer.set_camera(pos=wp.vec3(0.,-.001,.13),pitch=-89.5,yaw=90.)
         viewer.camera.look_at((0.,0.,0.))
-    overlay=MotionOverlay(sim.rest,sim.model.device)
+    overlay=MotionOverlay(sim.rest,sim.model.device,rigid_outline=sim.cam[0][240:480])
     viewer.register_ui_callback(overlay.panel,position="side")
     print(f'NATIVE_VIEWER_READY: Newton ViewerGL; live SolverVBD; {args.device}',flush=True)
     frame=0

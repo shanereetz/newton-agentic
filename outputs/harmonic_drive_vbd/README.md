@@ -93,3 +93,9 @@ The **wave generator is the input**, the **flexspline is the output**, and the o
 - **Pink dot:** follows the same flexspline material vertex, making slow material rotation distinguishable from the traveling deformation.
 
 The sidebar identifies each role and shows angles in degrees. Output angles are unwrapped across full turns. All indicators show actual motion without amplification or an imposed gear ratio. Add `--top-view` to the native-viewer command to look along the shaft. Physics and the drive arrangement are unchanged.
+
+### More visible rigid wave generator
+
+The live CPU demo now uses a rigid elliptical cam with diameters 50.7 × 45.6 mm (previously 50.7 × 47.24 mm). Its amber outline and axis marks rotate rigidly with the input. Only the toothed flexspline is deformable in this simplified scene. The cyan output dial is a separate display overlay above the assembly, not the cam surface.
+
+Use `--cam-minor 0.02362` with `native_viewer.py` or `simulate.py` to restore the earlier cam geometry. Changing the cam changes contact conditions; saved replay files still show their original geometry and results. This visualization experiment is separate from the steel-cup CUDA model, which additionally models bearing-race flexibility.

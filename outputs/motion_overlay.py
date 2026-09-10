@@ -5,11 +5,12 @@ import warp as wp
 
 
 class MotionOverlay:
-    def __init__(self, rest, device):
+    def __init__(self, rest, device, rigid_outline=None):
         # Track one material vertex on the tooth rim, not the moving wave crest.
         candidates = np.flatnonzero(rest[:, 2] > rest[:, 2].max() - 1e-6)
         self.marker = int(min(candidates, key=lambda i: abs(math.atan2(rest[i, 1], rest[i, 0]))))
         self.device = device
+        self.rigid_outline = rigid_outline
         self.previous = None
         self.output = 0.
         self.input = 0.
@@ -24,6 +25,8 @@ class MotionOverlay:
         imgui.text("Cyan dial represents the output shaft angle.")
         imgui.text("Pointers show actual angles, with no magnification.")
         imgui.text("The moving oval wave is not the output rotation.")
+        if self.rigid_outline is not None:
+            imgui.text("Amber ellipse and axes: rigid rotating cam.")
 
     def draw(self, viewer, q, input_angle, output_angle):
         if self.previous is None:
@@ -38,6 +41,16 @@ class MotionOverlay:
             starts.append(a); ends.append(b); colors.append(color)
         def point(r, angle):
             return [r*math.cos(angle), r*math.sin(angle), z]
+        if self.rigid_outline is not None:
+            # Only a rigid rotation of original cam vertices, never soft vertices.
+            c,s = math.cos(input_angle),math.sin(input_angle)
+            outline = np.array(self.rigid_outline,copy=True)
+            outline[:,:2] = outline[:,:2] @ np.array([[c,s],[-s,c]])
+            outline[:,2] += .0003
+            for a,b in zip(outline,np.roll(outline,-1,axis=0)):
+                line(a,b,(1.,.6,.08))
+            for i in (0,len(outline)//4):
+                line(outline[i],outline[i+len(outline)//2],(1.,.6,.08))
         # Stationary scale outside the circular spline; every tick is 10 degrees.
         for i in range(36):
             a = i*math.tau/36

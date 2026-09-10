@@ -59,7 +59,10 @@ class Simulation:
         b.add_soft_mesh(pos=(0,0,0),rot=wp.quat_identity(),scale=1.,vel=(0,0,0),vertices=self.rest.tolist(),indices=self.tets.ravel().tolist(),density=1200.,k_mu=args.young/(2*(1+.3)),k_lambda=args.young*.3/((1+.3)*(1-2*.3)),k_damp=.001,particle_radius=.000025,validate_mesh=True,label='flexspline')
         self.surface=np.asarray(b.tri_indices,dtype=np.int32)
         self.circular=ring_mesh(60*12,[(-.003,lambda t:np.full_like(t,.034)),(.003,lambda t:np.full_like(t,.034)),(.003,lambda t:.02675+.0009*(1+np.cos(60*t))/2),(-.003,lambda t:.02675+.0009*(1+np.cos(60*t))/2)])
-        self.cam=ring_mesh(240,[(-.003,lambda t:ellipse(.02535,.02362,t)),(.003,lambda t:ellipse(.02535,.02362,t)),(.003,lambda t:np.full_like(t,.004)),(-.003,lambda t:np.full_like(t,.004))])
+        self.cam_minor=getattr(args,"cam_minor",.0228)
+        if not .020 <= self.cam_minor <= .02535:
+            raise ValueError("cam_minor must be between 0.020 and 0.02535 metres")
+        self.cam=ring_mesh(240,[(-.003,lambda t:ellipse(.02535,self.cam_minor,t)),(.003,lambda t:ellipse(.02535,self.cam_minor,t)),(.003,lambda t:np.full_like(t,.004)),(-.003,lambda t:np.full_like(t,.004))])
         cfg=newton.ModelBuilder.ShapeConfig(density=0,ke=args.contact_ke,kd=.005,mu=args.friction,margin=0,gap=.00015,has_shape_collision=False)
         ring_cfg=cfg.copy();ring_cfg.has_particle_collision=not args.no_ring_contact
         self.ring_shape=b.add_shape_mesh(-1,mesh=newton.Mesh(*[self.circular[0],self.circular[1].ravel()]),cfg=ring_cfg,label='fixed circular spline')
@@ -122,6 +125,7 @@ def main():
     p.add_argument('--fps',type=int,default=30);p.add_argument('--substeps',type=int,default=8);p.add_argument('--iterations',type=int,default=15)
     p.add_argument('--samples',type=int,default=4);p.add_argument('--young',type=float,default=2e6)
     p.add_argument('--contact-ke',type=float,default=1e5);p.add_argument('--friction',type=float,default=.05)
+    p.add_argument('--cam-minor',type=float,default=.0228,help='Rigid cam minor semiaxis in metres; original demo: 0.02362')
     p.add_argument('--speed',type=float,default=1.);p.add_argument('--settle',type=float,default=.5)
     p.add_argument('--out',type=Path,default=ROOT/'results')
     args=p.parse_args();args.out.mkdir(parents=True,exist_ok=True)
