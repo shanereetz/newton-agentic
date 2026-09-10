@@ -8,7 +8,17 @@ from simulate import Simulation
 from newton.viewer import ViewerGL
 
 
+def _patch_pyglet_x11_primary_screen():
+    try:
+        from pyglet.display import xlib
+    except ImportError:
+        return
+    if not hasattr(xlib.XlibScreen, 'is_primary'):
+        xlib.XlibScreen.is_primary=property(lambda self: False)
+
+
 def main():
+    _patch_pyglet_x11_primary_screen()
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--device',default='cpu')
     parser.add_argument('--speed',type=float,default=1.)
@@ -22,10 +32,15 @@ def main():
     viewer.renderer.set_title('Newton VBD — Live Harmonic Drive')
     viewer.show_ground=False
     viewer.show_particles=False
+    # The gearbox is only 68 mm across. ViewerGL's default orbit pivot is
+    # metres away, so explicitly target the assembly and use millimetre-scale
+    # navigation values.
     viewer.camera.near=.0005
-    viewer.camera_speed=.025
+    viewer.camera.far=2.
+    viewer.camera_speed=.008
     viewer.set_camera(pos=wp.vec3(.025,-.07,.115),pitch=-58.,yaw=90.)
-    print('NATIVE_VIEWER_READY: Newton ViewerGL; live SolverVBD; CPU',flush=True)
+    viewer.camera.look_at((0.,0.,0.))
+    print(f'NATIVE_VIEWER_READY: Newton ViewerGL; live SolverVBD; {args.device}',flush=True)
     frame=0
     try:
         while viewer.is_running():

@@ -1,7 +1,7 @@
 {
   "engine": "Newton 1.5.1",
   "solver": "VBD",
-  "wall_seconds": 51.64760208129883,
+  "wall_seconds": 52.19187951087952,
   "particles": 928,
   "tetrahedra": 1392,
   "max_penetration_mm": 0.06649699807167053,
@@ -21,6 +21,6 @@
     "center_drift_mm": 1.4821475815551821e-05
   },
   "steady_max_penetration_mm": 0.0003850091015920043,
-  "measured_output_per_input": -0.034472161879037976,
+  "measured_output_per_input": -0.034472161600175424,
   "ideal_output_per_input": -0.034482758620689655
 }

@@ -1,8 +1,33 @@
 # Harmonic drive contact simulation — Newton VBD
 
-This simulation actually runs **Newton Physics 1.5.1, `newton.solvers.SolverVBD`**, with Warp 1.17.0. It was executed and tested on an Apple Silicon Mac using the CPU backend. The browser file is a replay of recorded Newton particle positions, not a browser physics substitute.
+This project runs **Newton Physics 1.5.1**, `newton.solvers.SolverVBD`, and Warp 1.17.0. Pass `--device cuda:0` to run collision detection and VBD integration on the first NVIDIA GPU. The CUDA path has been smoke-tested on an NVIDIA RTX PRO 6000 Blackwell GPU; the checked-in numerical results were produced and validated separately on the CPU backend.
 
-Open `replay.html` to play the full recorded run, scrub time, switch between top and 3D views, and highlight contact points. Drag the 3D view to rotate it. The dark dot marks a material point on the flexspline. Playback starts paused and does not loop. No network connection is needed for replay.
+The browser viewer is a replay of recorded Newton particle positions, not a browser physics substitute. Open `replay.html` to play the run, scrub time, switch between top and 3D views, and highlight contact points. Drag the 3D view to rotate it. The dark dot marks a material point on the flexspline. Playback starts paused and does not loop. No network connection is needed for replay.
+
+## Run on an NVIDIA GPU
+
+The host needs a working NVIDIA driver and a CUDA-capable GPU. Warp ships the CUDA runtime pieces used by this project, so a separate CUDA Toolkit installation is not normally required.
+
+From this folder, create the environment and confirm that Warp can see `cuda:0`:
+
+```sh
+nvidia-smi
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -r requirements.txt
+.venv/bin/python -c "import warp as wp; wp.init(); print(wp.get_device('cuda:0'))"
+```
+
+Run the full recorded simulation on the GPU and rebuild the offline replay:
+
+```sh
+.venv/bin/python simulate.py --device cuda:0 --duration 7.1 --out results_gpu
+.venv/bin/python build_viewer.py --data results_gpu/trajectory.json
+```
+
+Then open `replay.html` in a browser. The first CUDA run may spend additional time compiling kernels; later runs reuse the cache under `.warp_cache/`.
+
+On Windows, use `.venv\Scripts\python.exe` in place of `.venv/bin/python`. If the machine has multiple NVIDIA GPUs, select one with `--device cuda:1`, `cuda:2`, and so on. Use `--device cpu` only when a CUDA device is unavailable or when intentionally comparing backends.
 
 ## Model
 
@@ -16,9 +41,9 @@ Open `replay.html` to play the full recorded run, scrub time, switch between top
 
 The highlighted points are those with positive penetration of the particle contact envelope at a recorded frame. `max_contact_penalty_N` estimates the normal elastic penalty as stiffness × penetration; it is not a calibrated pressure or a complete force including friction/damping. Metrics are sampled at recorded frames, not every solver substep.
 
-## Results and checks
+## Checked-in results and checks
 
-The 7.1 s run uses 8 substeps per 30 Hz frame (240 solver steps/s), 15 VBD iterations per step, and a smooth ramp to 1 rad/s input. It took about 52 s of CPU execution with cached kernels.
+The checked-in 7.1 s run uses 8 substeps per 30 Hz frame (240 solver steps/s), 15 VBD iterations per step, and a smooth ramp to 1 rad/s input. It took about 52 s of CPU execution with cached kernels. Treat a newly generated CUDA result as a new run and repeat the checks before making quantitative claims from it.
 
 - Regression of settled output against input: **−0.0344722 rad/rad**, or **29.009:1** reduction; ideal 60/58 gearing is −1/29.
 - Both cam and tooth contact were detected. No inverted tetrahedra at recorded frames; the minimum sampled volume ratio was 0.985 of rest volume.
@@ -28,38 +53,32 @@ The 7.1 s run uses 8 substeps per 30 Hz frame (240 solver steps/s), 15 VBD itera
 
 Raw results are in `results/metrics.csv` and `results/summary.json`. The trajectory is in `results/trajectory.json`. Comparisons and assertions are in `validation/`. These checks support a contact-driven demonstration; they do not establish engineering accuracy, load capacity, fatigue, or torque transmission performance.
 
-## Run again
-
-Tested with Python 3.13. From this folder:
+## Additional GPU runs
 
 ```sh
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python simulate.py --duration 7.1
-.venv/bin/python build_viewer.py
-```
+# Finer integration on the first NVIDIA GPU
+.venv/bin/python simulate.py --device cuda:0 --duration 3 --substeps 16 --iterations 20 --out refined_gpu
 
-On Windows use `.venv\Scripts\python.exe` for the Python commands. On a supported NVIDIA/CUDA machine, add `--device cuda:0`; CUDA execution has not been tested for this project. The default CPU configuration is the validated path.
-
-Useful controls:
-
-```sh
-# Finer integration
-.venv/bin/python simulate.py --duration 3 --substeps 16 --iterations 20 --out refined
 # Remove outer-ring contact to inspect causality
-.venv/bin/python simulate.py --duration 3 --no-ring-contact --out no_ring
+.venv/bin/python simulate.py --device cuda:0 --duration 3 --no-ring-contact --out no_ring_gpu
+
 # Change input speed, material stiffness, or angular mesh resolution
-.venv/bin/python simulate.py --speed 0.5 --young 2000000 --samples 8
+.venv/bin/python simulate.py --device cuda:0 --speed 0.5 --young 2000000 --samples 8 --out parameter_sweep_gpu
 ```
 
-Other options: `--friction`, `--contact-ke`, `--settle`, `--fps`, `--iterations`, `--device`, `--out`. Altered configurations need fresh validation. Python dependencies install only into your chosen virtual environment. Warp writes compilation artifacts under `.warp_cache` beside the script; override with `WARP_CACHE_PATH` if needed. A small-element volume warning is expected from Newton's absolute mesh-quality threshold at this millimetre scale; signed volumes are also checked during the run.
+Each `--out` directory receives its own `trajectory.json`, `metrics.csv`, and `summary.json`. To replay a non-default trajectory, pass its path to `build_viewer.py`; the builder still writes `replay.html` in the project directory.
+
+Other options include `--friction`, `--contact-ke`, `--settle`, `--fps`, `--iterations`, `--device`, and `--out`. Altered configurations and backend changes need fresh validation. Python dependencies install only into the virtual environment. Set `WARP_CACHE_PATH` to relocate Warp's compilation cache if needed. A small-element volume warning is expected from Newton's absolute mesh-quality threshold at this millimetre scale; signed volumes are also checked during the run.
 
 Sources: [Newton VBD API](https://newton-physics.github.io/newton/1.5.0/api/_generated/newton.solvers.SolverVBD.html), [Newton rigid/soft example](https://github.com/newton-physics/newton/blob/v1.5.1/newton/examples/multiphysics/example_rigid_soft_contact.py), [Harmonic Drive operating principle](https://legacy.harmonicdrive.net/reference/applicationnotes/principles.php).
 
-## Native Newton visualizer (live)
+## Native Newton visualizer on the GPU
 
-On the prepared Mac, double-click `Open Newton Viewer.command` in Finder. It uses the already-installed workspace environment and opens Newton's `ViewerGL`, integrating the VBD model live. Pause/resume with the viewer's play control or Space. Close the window to stop. CPU execution is slower than real time.
+The live viewer needs a graphical desktop and the additional viewer dependencies:
 
-The Codex sandbox could not enumerate a macOS display, so native-window startup must be performed from the desktop session. The physics simulation was validated; native rendering could not be verified inside that sandbox.
+```sh
+.venv/bin/python -m pip install -r requirements-viewer.txt
+.venv/bin/python native_viewer.py --device cuda:0
+```
 
-For a fresh installation, install `requirements-viewer.txt` in your Python environment, then run `python native_viewer.py`. The provided `.command` launcher points to this Mac's prepared environment.
+This keeps rendering in Newton's `ViewerGL` while the simulation state is integrated on `cuda:0`. Pause or resume with the viewer's play control or Space, and close the window to stop. The included `Open Newton Viewer.command` is a prepared, machine-specific macOS launcher; use the explicit command above for a portable GPU-backed launch.
