@@ -61,3 +61,14 @@ These passed on the development Mac: watertight topology, positive reference tet
 - [Flexible strain-wave transmission modeling](https://link.springer.com/article/10.1186/s10033-023-00909-2): cup and bearing flexibility and surface contact motivate this upgrade.
 - [Steel flexspline material reference](https://www.mdpi.com/2076-0825/15/7/402); material values here still require calibration to the intended part.
 - [Abaqus contact constraint methods](https://docs.software.vt.edu/abaqusv2025/English/SIMACAEITNRefMap/simaitn-c-contactconstraints.htm) for an independent finite-element comparison. No Abaqus benchmark has been run.
+
+## Reading input and output in the native viewer
+
+The **wave generator is the input**, the **flexspline is the output**, and the outer circular spline stays fixed. The deforming oval travels much faster than the flexspline material rotates.
+
+- **Amber pointer:** wave-generator input angle.
+- **Cyan pointer and three-spoke dial:** measured flexspline output angle, representing an output shaft. This is a display indicator, not an additional simulated part.
+- **White index and surrounding scale:** fixed outer-ring reference, with ticks every 10 degrees.
+- **Pink dot:** follows the same flexspline material vertex, making slow material rotation distinguishable from the traveling deformation.
+
+The sidebar identifies each role and shows angles in degrees. Output angles are unwrapped across full turns. All indicators show actual motion without amplification or an imposed gear ratio. Add `--top-view` to the native-viewer command to look along the shaft. Physics and the drive arrangement are unchanged.

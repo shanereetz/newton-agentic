@@ -211,6 +211,7 @@ def parser():
     p.add_argument('--samples',type=int,default=8);p.add_argument('--layers',type=int,default=2);p.add_argument('--axial-refine',type=int,default=1);p.add_argument('--rigid-samples',type=int,default=24)
     p.add_argument('--voxel',type=float,default=2.5e-5);p.add_argument('--contact-gap',type=float,default=7.5e-5);p.add_argument('--self-radius',type=float,default=2e-6)
     p.add_argument('--damping',type=float,default=0.);p.add_argument('--speed',type=float,default=.1)
+    p.add_argument('--top-view',action='store_true',help='Look down the shaft to compare rotation pointers')
     p.add_argument('--no-ring-contact',action='store_true');p.add_argument('--record-mesh',action='store_true');p.add_argument('--viewer',action='store_true');p.add_argument('--geometry-only',action='store_true')
     p.add_argument('--out',type=Path,default=ROOT/'runs/default');p.add_argument('--cache',type=Path,default=ROOT/'.cache')
     return p
@@ -224,13 +225,22 @@ def main():
     sim=Experiment(args)
     if args.viewer:
         from newton.viewer import ViewerGL
+        import sys
+        sys.path.insert(0,str(ROOT.parent))
+        from motion_overlay import MotionOverlay
         viewer=ViewerGL(width=1400,height=900,vsync=True,paused=False);viewer.set_model(sim.model)
         viewer.renderer.set_title('Newton VBD — CUDA Steel Reference (experimental)');viewer.show_ground=False
         viewer.camera.near=.0005;viewer.camera_speed=.025;viewer.set_camera(wp.vec3(.04,-.09,.07),pitch=-45.,yaw=90.)
+        if args.top_view:
+            viewer.set_camera(wp.vec3(0.,-.001,.13),pitch=-89.5,yaw=90.)
+        viewer.camera.look_at((0.,0.,0.))
+        overlay=MotionOverlay(sim.rest,sim.model.device)
+        viewer.register_ui_callback(overlay.panel,position="side")
         try:
             while viewer.is_running():
                 if viewer.should_step() and sim.t<args.duration:sim.advance(1/30)
                 viewer.begin_frame(sim.t);viewer.log_state(sim.a)
+                overlay.draw(viewer,sim.a.particle_q.numpy(),sim.rows[-1]['input_rad'],sim.rows[-1]['output_rad'])
                 for key in ['output_rad','load_Nm','max_von_mises_MPa','ring_active_contacts','face_edge_contact_candidates']:viewer.log_scalar(key,sim.rows[-1][key])
                 viewer.end_frame()
         finally:sim.save();viewer.close()

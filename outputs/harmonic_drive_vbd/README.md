@@ -82,3 +82,14 @@ The live viewer needs a graphical desktop and the additional viewer dependencies
 ```
 
 This keeps rendering in Newton's `ViewerGL` while the simulation state is integrated on `cuda:0`. Pause or resume with the viewer's play control or Space, and close the window to stop. The included `Open Newton Viewer.command` is a prepared, machine-specific macOS launcher; use the explicit command above for a portable GPU-backed launch.
+
+## Reading input and output in the native viewer
+
+The **wave generator is the input**, the **flexspline is the output**, and the outer circular spline stays fixed. The deforming oval travels much faster than the flexspline material rotates.
+
+- **Amber pointer:** wave-generator input angle.
+- **Cyan pointer and three-spoke dial:** measured flexspline output angle, representing an output shaft. This is a display indicator, not an additional simulated part.
+- **White index and surrounding scale:** fixed outer-ring reference, with ticks every 10 degrees.
+- **Pink dot:** follows the same flexspline material vertex, making slow material rotation distinguishable from the traveling deformation.
+
+The sidebar identifies each role and shows angles in degrees. Output angles are unwrapped across full turns. All indicators show actual motion without amplification or an imposed gear ratio. Add `--top-view` to the native-viewer command to look along the shaft. Physics and the drive arrangement are unchanged.

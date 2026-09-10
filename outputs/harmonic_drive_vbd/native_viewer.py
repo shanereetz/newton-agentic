@@ -2,10 +2,13 @@
 import argparse
 import math
 import time
+import sys
 from pathlib import Path
 import warp as wp
 from simulate import Simulation
 from newton.viewer import ViewerGL
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from motion_overlay import MotionOverlay
 
 
 def _patch_pyglet_x11_primary_screen():
@@ -23,6 +26,7 @@ def main():
     parser.add_argument('--device',default='cpu')
     parser.add_argument('--speed',type=float,default=1.)
     parser.add_argument('--paused',action='store_true')
+    parser.add_argument('--top-view',action='store_true',help='Look down the shaft to compare rotation pointers')
     args=parser.parse_args()
     args.samples=4;args.young=2e6;args.contact_ke=1e5;args.friction=.05
     args.no_ring_contact=False;args.iterations=15;args.fps=30;args.substeps=8;args.settle=.5
@@ -40,6 +44,11 @@ def main():
     viewer.camera_speed=.008
     viewer.set_camera(pos=wp.vec3(.025,-.07,.115),pitch=-58.,yaw=90.)
     viewer.camera.look_at((0.,0.,0.))
+    if args.top_view:
+        viewer.set_camera(pos=wp.vec3(0.,-.001,.13),pitch=-89.5,yaw=90.)
+        viewer.camera.look_at((0.,0.,0.))
+    overlay=MotionOverlay(sim.rest,sim.model.device)
+    viewer.register_ui_callback(overlay.panel,position="side")
     print(f'NATIVE_VIEWER_READY: Newton ViewerGL; live SolverVBD; {args.device}',flush=True)
     frame=0
     try:
@@ -50,6 +59,7 @@ def main():
             viewer.begin_frame(sim.t)
             viewer.log_state(sim.a)
             m=sim.rows[-1]
+            overlay.draw(viewer,sim.a.particle_q.numpy(),m['input_rad'],m['output_rad'])
             viewer.log_scalar('Input (degrees)',math.degrees(m['input_rad']))
             viewer.log_scalar('Output (degrees)',math.degrees(m['output_rad']))
             viewer.log_scalar('Tooth contacts',m['ring_contacts'])
