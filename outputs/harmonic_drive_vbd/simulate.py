@@ -1,4 +1,4 @@
-"""Newton VBD harmonic-drive contact experiment (SI units).
+"""Newton / ROM elastics harmonic-drive contact experiment (SI units).
 A deformable toothed ring replaces the static display mesh. No output gearing constraint.
 """
 from pathlib import Path
@@ -6,7 +6,7 @@ import argparse, json, math, time, csv, os
 import numpy as np
 import warp as wp
 import newton
-from newton.solvers import SolverVBD
+from rom_elastics import SolverROM
 
 ROOT = Path(__file__).resolve().parent
 wp.config.kernel_cache_dir = os.environ.get('WARP_CACHE_PATH', str(ROOT / '.warp_cache'))
@@ -68,15 +68,15 @@ class Simulation:
         self.ring_shape=b.add_shape_mesh(-1,mesh=newton.Mesh(*[self.circular[0],self.circular[1].ravel()]),cfg=ring_cfg,label='fixed circular spline')
         self.cam_body=b.add_body(is_kinematic=True,label='motor driven wave generator')
         self.cam_shape=b.add_shape_mesh(self.cam_body,mesh=newton.Mesh(self.cam[0],self.cam[1].ravel()),cfg=cfg,label='elliptical bearing envelope')
-        b.color()
         self.model=b.finalize(device=args.device)
         self.model.soft_contact_ke=args.contact_ke;self.model.soft_contact_kd=.005;self.model.soft_contact_mu=args.friction
         self.pipeline=newton.CollisionPipeline(self.model,soft_contact_margin=.00015,soft_contact_max=len(self.rest)*4,include_static_kinematic_pairs=False)
         self.contacts=self.pipeline.contacts()
-        self.solver=SolverVBD(self.model,iterations=args.iterations,particle_enable_tile_solve=False,particle_enable_self_contact=False,rigid_body_particle_contact_buffer_size=len(self.rest)*2,friction_epsilon=.0001)
+        self.solver=SolverROM(self.model,self.rest,self.tets,harmonics=args.rom_harmonics,iterations=args.iterations,tolerance=args.rom_tolerance,damping=args.rom_damping)
         self.a=self.model.state();self.b=self.model.state();self.control=self.model.control()
-        # Initial assembly preload only; all subsequent flex motion is integrated by VBD.
+        # Initial assembly preload only; all subsequent flex motion is integrated in the ROM subspace.
         initial=self.rest.copy();initial[:,0]*=1.033;initial[:,1]*=.967
+        initial=self.solver.reconstruct(self.solver.project(initial)).astype(np.float32)
         self.a.particle_q.assign(initial);self.b.particle_q.assign(initial)
         self.v0=volumes(self.rest,self.tets)
         self.t=0.;self.angle=0.;self.frames=[];self.rows=[]
@@ -106,6 +106,8 @@ class Simulation:
         # Mean material angular displacement; shape deformation cancels over full circumference.
         z=(q[:,0]+1j*q[:,1])/(self.rest[:,0]+1j*self.rest[:,1])
         output=float(np.angle(np.mean(z/np.abs(z))))
+        if self.rows:
+            output += TAU * round((self.rows[-1]['output_rad'] - output) / TAU)
         self.pipeline.collide(self.a,self.contacts)
         count=int(self.contacts.soft_contact_count.numpy()[0]);ids=self.contacts.soft_contact_particle.numpy()[:count];sh=self.contacts.soft_contact_shape.numpy()[:count]
         cp=self.contacts.soft_contact_body_pos.numpy()[:count].copy();norm=self.contacts.soft_contact_normal.numpy()[:count]
@@ -115,34 +117,59 @@ class Simulation:
         active=depth>0
         pressure=np.zeros(len(q));np.maximum.at(pressure,ids,np.maximum(depth,0)*self.args.contact_ke)
         row={'time_s':self.t,'input_rad':self.angle,'output_rad':output,'ring_contacts':int(np.sum(active & ~m)),'cam_contacts':int(np.sum(active & m)),'max_penetration_mm':float(max(0,depth.max(initial=0))*1000),'min_volume_ratio':float(vr.min()),'max_volume_ratio':float(vr.max()),'max_contact_penalty_N':float(pressure.max()),'center_drift_mm':float(np.linalg.norm(q.mean(axis=0)[:2])*1000)}
+        row.update(rom_dofs=self.solver.rank,rom_iterations=self.solver.last_iterations,rom_residual=self.solver.last_residual)
         self.rows.append(row)
         self.frames.append({'t':round(self.t,5),'angle':round(self.angle,6),'q':np.round(q*1000,4).tolist(),'force':np.round(pressure,5).tolist(),'metrics':row})
 
-def main():
+def parser(*, viewer=False):
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('--no-ring-contact',action='store_true',help='Validation ablation: disable outer gear contact')
-    p.add_argument('--device',default='cpu');p.add_argument('--duration',type=float,default=3.)
-    p.add_argument('--fps',type=int,default=30);p.add_argument('--substeps',type=int,default=8);p.add_argument('--iterations',type=int,default=15)
+    p.add_argument('--device',default='cpu')
+    if viewer:
+        p.set_defaults(duration=0.)
+    else:
+        p.add_argument('--duration',type=float,default=3.)
+    p.add_argument('--fps',type=int,default=30);p.add_argument('--substeps',type=int,default=8);p.add_argument('--iterations',type=int,default=400)
+    p.add_argument('--rom-harmonics',type=int,default=8,help='Highest Fourier harmonic in the elastic displacement basis')
+    p.add_argument('--rom-tolerance',type=float,default=1e-7,help='Preconditioned gradient tolerance')
+    p.add_argument('--rom-damping',type=float,default=2.,help='Mass-proportional damping in 1/s')
     p.add_argument('--samples',type=int,default=4);p.add_argument('--young',type=float,default=2e6)
     p.add_argument('--contact-ke',type=float,default=1e5);p.add_argument('--friction',type=float,default=.05)
     p.add_argument('--cam-minor',type=float,default=.0228,help='Rigid cam minor semiaxis in metres; original demo: 0.02362')
     p.add_argument('--speed',type=float,default=1.);p.add_argument('--settle',type=float,default=.5)
-    p.add_argument('--out',type=Path,default=ROOT/'results')
-    args=p.parse_args();args.out.mkdir(parents=True,exist_ok=True)
+    if not viewer:
+        p.add_argument('--out',type=Path,default=ROOT/'results_rom')
+    return p
+
+def main():
+    args=parser().parse_args()
+    validate_args(args)
+    args.out.mkdir(parents=True,exist_ok=True)
     start=time.time();sim=Simulation(args)
     for i in range(round(args.duration*args.fps)):
         sim.step()
         if (i+1)%args.fps==0:print(json.dumps(sim.rows[-1]),flush=True)
     config=vars(args).copy();config['out']=str(config['out'])
-    payload={'engine':f'Newton {newton.__version__}','solver':'VBD','config':config,'surface':sim.surface.tolist(),'circular':{'v':(sim.circular[0]*1000).round(4).tolist(),'f':sim.circular[1].tolist()},'cam':{'v':(sim.cam[0]*1000).round(4).tolist(),'f':sim.cam[1].tolist()},'frames':sim.frames}
+    payload={'engine':f'Newton {newton.__version__}','solver':sim.solver.name,'config':config,'surface':sim.surface.tolist(),'circular':{'v':(sim.circular[0]*1000).round(4).tolist(),'f':sim.circular[1].tolist()},'cam':{'v':(sim.cam[0]*1000).round(4).tolist(),'f':sim.cam[1].tolist()},'frames':sim.frames}
     (args.out/'trajectory.json').write_text(json.dumps(payload,separators=(',',':')))
     with (args.out/'metrics.csv').open('w',newline='') as f:
         w=csv.DictWriter(f,fieldnames=sim.rows[0]);w.writeheader();w.writerows(sim.rows)
-    summary={'engine':payload['engine'],'solver':'VBD','wall_seconds':time.time()-start,'particles':len(sim.rest),'tetrahedra':len(sim.tets),'max_penetration_mm':max(r['max_penetration_mm'] for r in sim.rows),'min_volume_ratio':min(r['min_volume_ratio'] for r in sim.rows),'peak_ring_contacts':max(r['ring_contacts'] for r in sim.rows),'peak_cam_contacts':max(r['cam_contacts'] for r in sim.rows),'final':sim.rows[-1]}
+    summary={'engine':payload['engine'],'solver':sim.solver.name,'elastic_device':'cpu','rom_dofs':sim.solver.rank,'wall_seconds':time.time()-start,'particles':len(sim.rest),'tetrahedra':len(sim.tets),'max_penetration_mm':max(r['max_penetration_mm'] for r in sim.rows),'min_volume_ratio':min(r['min_volume_ratio'] for r in sim.rows),'peak_ring_contacts':max(r['ring_contacts'] for r in sim.rows),'peak_cam_contacts':max(r['cam_contacts'] for r in sim.rows),'final':sim.rows[-1]}
     settled=[r for r in sim.rows if r['time_s']>=args.settle]
     summary['steady_max_penetration_mm']=max(r['max_penetration_mm'] for r in settled) if settled else None
     if len(settled)>2 and settled[-1]['input_rad']>0:
         summary['measured_output_per_input']=float(np.polyfit([r['input_rad'] for r in settled],[r['output_rad'] for r in settled],1)[0])
         summary['ideal_output_per_input']=-2/58
     (args.out/'summary.json').write_text(json.dumps(summary,indent=2));print(json.dumps(summary,indent=2))
+def validate_args(args):
+    numeric = (args.duration,args.fps,args.substeps,args.iterations,args.samples,args.young,args.contact_ke,args.rom_tolerance,args.rom_harmonics,args.rom_damping,args.friction,args.speed,args.settle,args.cam_minor)
+    if not np.isfinite(numeric).all():
+        raise ValueError('Simulation parameters must be finite')
+    if args.settle < 0:
+        raise ValueError('Settle time must be nonnegative')
+    if args.duration < 0 or min(args.fps,args.substeps,args.iterations,args.samples,args.young,args.contact_ke,args.rom_tolerance) <= 0:
+        raise ValueError('Duration must be nonnegative; discretization, stiffness and tolerance must be positive')
+    if args.samples < 4 or not 2 <= args.rom_harmonics < 29*args.samples or args.rom_damping < 0 or args.friction < 0:
+        raise ValueError('Use samples>=4, 2<=rom-harmonics<29*samples, damping>=0 and friction>=0')
+
 if __name__=='__main__':main()

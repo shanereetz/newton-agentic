@@ -1,101 +1,63 @@
-# Harmonic drive contact simulation — Newton VBD
+# Harmonic drive — ROM elastics
 
-This project runs **Newton Physics 1.5.1**, `newton.solvers.SolverVBD`, and Warp 1.17.0. Pass `--device cuda:0` to run collision detection and VBD integration on the first NVIDIA GPU. The CUDA path has been smoke-tested on an NVIDIA RTX PRO 6000 Blackwell GPU; the checked-in numerical results were produced and validated separately on the CPU backend.
+On this branch, `simulate.py` and `native_viewer.py` use the local `SolverROM` in `rom_elastics.py`. Newton 1.5.1 and Warp 1.17.0 supply the mesh, collision candidates, state buffers and renderer. SciPy integrates reduced-order elasticity on the CPU. `--device cuda:0` moves Newton collision detection and state buffers to CUDA; it does **not** move the reduced solve to the GPU.
 
-The browser viewer is a replay of recorded Newton particle positions, not a browser physics substitute. Open `replay.html` to play the run, scrub time, switch between top and 3D views, and highlight contact points. Drag the 3D view to rotate it. The dark dot marks a material point on the flexspline. Playback starts paused and does not loop. No network connection is needed for replay.
+The directory keeps its historical name to preserve existing asset paths. `replay.html`, `results/`, `results_gpu/`, `refined/` and `validation/` contain earlier VBD evidence; their numerical claims do not validate ROM. See [README_VBD.md](README_VBD.md) for that history and use `main` to reproduce VBD. The separate `../harmonic_drive_realistic/` steel-cup VBD experiment is not the ROM implementation.
 
-## Run on an NVIDIA GPU
+## Run
 
-The host needs a working NVIDIA driver and a CUDA-capable GPU. Warp ships the CUDA runtime pieces used by this project, so a separate CUDA Toolkit installation is not normally required.
-
-From this folder, create the environment and confirm that Warp can see `cuda:0`:
+From this folder:
 
 ```sh
-nvidia-smi
 python3 -m venv .venv
-.venv/bin/python -m pip install --upgrade pip
 .venv/bin/python -m pip install -r requirements.txt
-.venv/bin/python -c "import warp as wp; wp.init(); print(wp.get_device('cuda:0'))"
+# Small dense ROM operations benefit from one BLAS thread.
+export OPENBLAS_NUM_THREADS=1
+.venv/bin/python simulate.py --duration 3
+.venv/bin/python build_viewer.py
 ```
 
-Run the full recorded simulation on the GPU and rebuild the offline replay:
+Open `replay_rom.html` for the self-contained recorded replay. New runs default to `results_rom/` and write `trajectory.json`, `metrics.csv`, and `summary.json`, with ROM solver identification and configuration. Use `--out` for separate runs and `build_viewer.py --data path/trajectory.json --out path/replay.html` to select another recording. Replay labels are taken from the actual recording, including when replaying historical VBD data.
 
-```sh
-.venv/bin/python simulate.py --device cuda:0 --duration 7.1 --out results_gpu
-.venv/bin/python build_viewer.py --data results_gpu/trajectory.json
-```
-
-Then open `replay.html` in a browser. The first CUDA run may spend additional time compiling kernels; later runs reuse the cache under `.warp_cache/`.
-
-On Windows, use `.venv\Scripts\python.exe` in place of `.venv/bin/python`. If the machine has multiple NVIDIA GPUs, select one with `--device cuda:1`, `cuda:2`, and so on. Use `--device cpu` only when a CUDA device is unavailable or when intentionally comparing backends.
-
-## Model
-
-- Fixed circular spline: 60 teeth, 68 mm outside diameter.
-- Flexspline: 58 teeth, 928 free particles, 1,392 tetrahedral finite elements. VBD computes deformation and rotation. There is **no prescribed output angle, gear-ratio constraint, or per-frame ellipse assignment**.
-- Wave generator: kinematically driven elliptical rigid mesh. This represents an ideal speed-controlled motor and the outside envelope of its bearing. It presses against the flexspline through Newton particle-to-mesh contacts.
-- The ring is initially placed in an approximate ellipse once as an assembly preload, then settles for 0.5 s. Newton alone updates it thereafter.
-- A 4 mm thick toothed ring replaces the prior display model's cup to keep the contact experiment small. Gravity is disabled. There is no output shaft, applied output load, axial bearing, or motor torque limit.
-- SI units in the solver. Young's modulus 2 MPa, Poisson ratio 0.3, density 1,200 kg/m³, contact stiffness 100,000 N/m, friction coefficient 0.05. This deliberately compliant demonstration material does not represent a commercial steel flexspline.
-- Particle collision radius 0.025 mm; contact search margin 0.15 mm. Contact is sampled at vertices; full-surface SDF and self-contact are disabled. Coarse sinusoidal tooth profiles are illustrative, not manufactured conjugate profiles.
-
-The highlighted points are those with positive penetration of the particle contact envelope at a recorded frame. `max_contact_penalty_N` estimates the normal elastic penalty as stiffness × penetration; it is not a calibrated pressure or a complete force including friction/damping. Metrics are sampled at recorded frames, not every solver substep.
-
-## Checked-in results and checks
-
-The checked-in 7.1 s run uses 8 substeps per 30 Hz frame (240 solver steps/s), 15 VBD iterations per step, and a smooth ramp to 1 rad/s input. It took about 52 s of CPU execution with cached kernels. Treat a newly generated CUDA result as a new run and repeat the checks before making quantitative claims from it.
-
-- Regression of settled output against input: **−0.0344722 rad/rad**, or **29.009:1** reduction; ideal 60/58 gearing is −1/29.
-- Both cam and tooth contact were detected. No inverted tetrahedra at recorded frames; the minimum sampled volume ratio was 0.985 of rest volume.
-- Maximum sampled contact-envelope penetration after settling: **0.000385 mm**. Initial preload overlap reached 0.0665 mm. These are vertex-based metrics, not a whole-surface penetration guarantee.
-- A 3 s refinement run with 16 substeps/frame and 20 iterations differed from the coarse output by **0.0155°**.
-- Disabling circular-spline collision changed 3 s output from **−4.33° to +13.51°**. This verifies that outer tooth contact materially determines the output rather than an imposed ratio.
-
-Raw results are in `results/metrics.csv` and `results/summary.json`. The trajectory is in `results/trajectory.json`. Comparisons and assertions are in `validation/`. These checks support a contact-driven demonstration; they do not establish engineering accuracy, load capacity, fatigue, or torque transmission performance.
-
-## Additional GPU runs
-
-```sh
-# Finer integration on the first NVIDIA GPU
-.venv/bin/python simulate.py --device cuda:0 --duration 3 --substeps 16 --iterations 20 --out refined_gpu
-
-# Remove outer-ring contact to inspect causality
-.venv/bin/python simulate.py --device cuda:0 --duration 3 --no-ring-contact --out no_ring_gpu
-
-# Change input speed, material stiffness, or angular mesh resolution
-.venv/bin/python simulate.py --device cuda:0 --speed 0.5 --young 2000000 --samples 8 --out parameter_sweep_gpu
-```
-
-Each `--out` directory receives its own `trajectory.json`, `metrics.csv`, and `summary.json`. To replay a non-default trajectory, pass its path to `build_viewer.py`; the builder still writes `replay.html` in the project directory.
-
-Other options include `--friction`, `--contact-ke`, `--settle`, `--fps`, `--iterations`, `--device`, and `--out`. Altered configurations and backend changes need fresh validation. Python dependencies install only into the virtual environment. Set `WARP_CACHE_PATH` to relocate Warp's compilation cache if needed. A small-element volume warning is expected from Newton's absolute mesh-quality threshold at this millimetre scale; signed volumes are also checked during the run.
-
-Sources: [Newton VBD API](https://newton-physics.github.io/newton/1.5.0/api/_generated/newton.solvers.SolverVBD.html), [Newton rigid/soft example](https://github.com/newton-physics/newton/blob/v1.5.1/newton/examples/multiphysics/example_rigid_soft_contact.py), [Harmonic Drive operating principle](https://legacy.harmonicdrive.net/reference/applicationnotes/principles.php).
-
-## Native Newton visualizer on the GPU
-
-The live viewer needs a graphical desktop and the additional viewer dependencies:
+For Newton's live viewer on a graphical desktop:
 
 ```sh
 .venv/bin/python -m pip install -r requirements-viewer.txt
-.venv/bin/python native_viewer.py --device cuda:0
+.venv/bin/python native_viewer.py --device cuda:0 --top-view
 ```
 
-This keeps rendering in Newton's `ViewerGL` while the simulation state is integrated on `cuda:0`. Pause or resume with the viewer's play control or Space, and close the window to stop. The included `Open Newton Viewer.command` is a prepared, machine-specific macOS launcher; use the explicit command above for a portable GPU-backed launch.
+The viewer accepts the same material, mesh, contact and ROM options as the headless simulation. Space pauses; close the window to stop. The amber pointer is the wave-generator input, the cyan dial is measured flexspline output, and the pink dot follows a material vertex. These indicators do not impose a gear ratio.
 
-## Reading input and output in the native viewer
+## Elasticity and contact
 
-The **wave generator is the input**, the **flexspline is the output**, and the outer circular spline stays fixed. The deforming oval travels much faster than the flexspline material rotates.
+The 60/58-tooth demonstration geometry is retained: a fixed circular spline, kinematically driven elliptical cam, and deformable 4 mm thick ring with 928 vertices and 1,392 tetrahedra. Young's modulus is 2 MPa, Poisson ratio 0.3, and density 1,200 kg/m³. There is no output shaft, applied load, gravity, self-contact, or full-surface contact. The cam diameters are 50.7 × 45.6 mm; `--cam-minor 0.02362` selects the historical minor semiaxis.
 
-- **Amber pointer:** wave-generator input angle.
-- **Cyan pointer and three-spoke dial:** measured flexspline output angle, representing an output shaft. This is a display indicator, not an additional simulated part.
-- **White index and surrounding scale:** fixed outer-ring reference, with ticks every 10 degrees.
-- **Pink dot:** follows the same flexspline material vertex, making slow material rotation distinguishable from the traveling deformation.
+The displacement is `x = X + B q`. A geometric Fourier basis with independent radial variation and axial thickness modes reduces 2,784 vertex coordinates to 102 coordinates at `--rom-harmonics 8`. In-plane affine deformation, finite rotation about the shaft and the initial assembly ellipse are representable. The basis is built from rest geometry, without a training trajectory or prescribed output angle.
 
-The sidebar identifies each role and shows angles in degrees. Output angles are unwrapped across full turns. All indicators show actual motion without amplification or an imposed gear ratio. Add `--top-view` to the native-viewer command to look along the shaft. Physics and the drive arrangement are unchanged.
+All tetrahedra contribute stable Neo-Hookean energy and analytic reduced forces. The material parameters match Newton's small-strain Lamé conversion. Implicit Euler minimizes inertia, elastic energy, unilateral normal penalties and regularized friction using a preconditioned BFGS solve. Friction uses lagged normal loads. Damping is mass-proportional (`--rom-damping`, in 1/s); the VBD element/contact damping is not used by ROM. Newton contact candidates and tangent planes are frozen within each substep and refreshed for the next one.
 
-### More visible rigid wave generator
+`--iterations` (default 400) limits each nonlinear solve, and `--rom-tolerance` controls its preconditioned gradient tolerance. A failed convergence check, nonfinite state, contact-buffer overflow, or inverted element stops execution. The CSV records reduced dimension, final-substep iterations and residual. Frame contact penalties are stiffness × vertex penetration, not calibrated pressure; recorded extrema do not bound between-frame penetration.
 
-The live CPU demo now uses a rigid elliptical cam with diameters 50.7 × 45.6 mm (previously 50.7 × 47.24 mm). Its amber outline and axis marks rotate rigidly with the input. Only the toothed flexspline is deformable in this simplified scene. The cyan output dial is a separate display overlay above the assembly, not the cam surface.
+This is a local Galerkin ROM, not an upstream Newton ROM API. Elastic quadrature still visits every tet and collision detection visits the full mesh, so fewer coordinates alone do not establish a speedup. The truncated basis omits local tooth and out-of-plane bending modes. Neither the old VBD reduction ratio nor commercial steel-gearbox accuracy is assumed for this solver.
 
-Use `--cam-minor 0.02362` with `native_viewer.py` or `simulate.py` to restore the earlier cam geometry. Changing the cam changes contact conditions; saved replay files still show their original geometry and results. This visualization experiment is separate from the steel-cup CUDA model, which additionally models bearing-race flexibility.
+## Validation
+
+```sh
+OPENBLAS_NUM_THREADS=1 .venv/bin/python -m unittest discover -s . -p 'test_rom*.py'
+# Contact causality, temporal refinement, and basis refinement:
+OPENBLAS_NUM_THREADS=1 .venv/bin/python simulate.py --duration 3 --no-ring-contact --out no_ring_rom
+OPENBLAS_NUM_THREADS=1 .venv/bin/python simulate.py --duration 3 --substeps 16 --out refined_rom
+OPENBLAS_NUM_THREADS=1 .venv/bin/python simulate.py --duration 3 --rom-harmonics 12 --out modes12_rom
+```
+
+The physics tests check energy derivatives, finite-rotation invariance, preload reconstruction, stationary unforced rest, kinematic cam propagation, and an integrated contact response. Compare basis size and timestep before using the output quantitatively. The simulation remains a compliant contact demonstration rather than a validated gearbox design.
+
+Measured checks on Linux with the pinned dependencies are recorded in [validation_rom.json](validation_rom.json):
+
+- The 3 s default run measured output/input = −0.0343073, versus ideal −1/29.
+- Disabling circular-spline contact changed the fitted slope to +0.998081.
+- Doubling substeps from 8 to 16 changed final output by 0.00090°.
+- Increasing Fourier harmonics from 8 to 12 (102 to 150 coordinates) changed final output by 0.00297°.
+- Six physics tests and a 0.2 s CUDA-collision assembly smoke test passed. The native viewer import and command-line path were checked; its graphical window was not exercised.
+
+The raw ROM recordings are generated locally and ignored by Git. Run configurations, summary metrics and trajectory hashes are retained in the validation report. Wall timings include initialization and concurrent validation workloads and should not be interpreted as a performance comparison with VBD.

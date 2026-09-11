@@ -2,16 +2,13 @@
 
 Local design and simulation workspace.
 
-## Demonstrated baseline
+## Harmonic drive on this branch
 
-`outputs/harmonic_drive_vbd/` contains the Newton 1.5.1 / Warp 1.17.0 VBD contact demo. It was executed on Apple Silicon CPU and produced the saved 7.1-second trajectory, contact metrics, and a reduction near 29:1.
+`outputs/harmonic_drive_vbd/simulate.py` and its native viewer now use ROM elastics: nonlinear tetrahedral elasticity projected into a Fourier displacement basis. The default uses 102 reduced coordinates for the existing 928-vertex ring. Newton provides collisions and visualization; the reduced solve runs on CPU, including when collisions use CUDA.
 
-- Open `outputs/harmonic_drive_vbd/replay.html` for the recorded demonstration.
-- Follow that folder's README to reproduce the simulation.
-- The native viewer entry point is `native_viewer.py`; its physics is the same demo. Native macOS window creation could not be verified from the Codex sandbox.
-- Baseline validation includes timestep refinement and disabling circular-spline contact.
+Follow [the ROM README](outputs/harmonic_drive_vbd/README.md) for setup, execution, and validation. New recordings use `results_rom/` and `replay_rom.html`. The historical directory name and saved VBD results are retained; the VBD implementation remains reproducible on `main`. The steel-cup experiment in `outputs/harmonic_drive_realistic/` is separate and still uses VBD.
 
-This baseline is deliberately simplified and is not a validated engineering gearbox model. Keep it reproducible on `main`. More realistic CUDA experiments belong on a separate branch.
+This is an experimental, compliant contact model, not a validated engineering gearbox.
 
 ## Other deliverables
 

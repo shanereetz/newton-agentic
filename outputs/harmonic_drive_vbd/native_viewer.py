@@ -1,11 +1,10 @@
-"""Live Newton ViewerGL + SolverVBD. Space pauses; close the window to stop."""
-import argparse
+"""Live Newton ViewerGL + ROM elastics. Space pauses; close the window to stop."""
 import math
 import time
 import sys
 from pathlib import Path
 import warp as wp
-from simulate import Simulation
+from simulate import Simulation, parser as simulation_parser, validate_args
 from newton.viewer import ViewerGL
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from motion_overlay import MotionOverlay
@@ -22,19 +21,16 @@ def _patch_pyglet_x11_primary_screen():
 
 def main():
     _patch_pyglet_x11_primary_screen()
-    parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--device',default='cpu')
-    parser.add_argument('--cam-minor',type=float,default=.0228,help='Rigid cam minor semiaxis in metres')
-    parser.add_argument('--speed',type=float,default=1.)
+    parser=simulation_parser(viewer=True)
+    parser.description=__doc__
     parser.add_argument('--paused',action='store_true')
     parser.add_argument('--top-view',action='store_true',help='Look down the shaft to compare rotation pointers')
     args=parser.parse_args()
-    args.samples=4;args.young=2e6;args.contact_ke=1e5;args.friction=.05
-    args.no_ring_contact=False;args.iterations=15;args.fps=30;args.substeps=8;args.settle=.5
+    validate_args(args)
     sim=Simulation(args)
     viewer=ViewerGL(width=1280,height=850,vsync=True,paused=args.paused)
     viewer.set_model(sim.model)
-    viewer.renderer.set_title('Newton VBD — Live Harmonic Drive')
+    viewer.renderer.set_title('Newton ROM elastics — Live Harmonic Drive')
     viewer.show_ground=False
     viewer.show_particles=False
     # The gearbox is only 68 mm across. ViewerGL's default orbit pivot is
@@ -50,7 +46,7 @@ def main():
         viewer.camera.look_at((0.,0.,0.))
     overlay=MotionOverlay(sim.rest,sim.model.device,rigid_outline=sim.cam[0][240:480])
     viewer.register_ui_callback(overlay.panel,position="side")
-    print(f'NATIVE_VIEWER_READY: Newton ViewerGL; live SolverVBD; {args.device}',flush=True)
+    print(f'NATIVE_VIEWER_READY: Newton ViewerGL; live ROM elastics; {args.device}',flush=True)
     frame=0
     try:
         while viewer.is_running():
@@ -68,7 +64,7 @@ def main():
             viewer.end_frame()
             frame+=1
             if frame%30==0:
-                print(f"Live VBD: t={sim.t:.2f}s, ring contacts={m['ring_contacts']}, output={math.degrees(m['output_rad']):.2f} deg",flush=True)
+                print(f"Live ROM: t={sim.t:.2f}s, ring contacts={m['ring_contacts']}, output={math.degrees(m['output_rad']):.2f} deg",flush=True)
             # This is live execution, so retain only current diagnostics.
             sim.frames[:]=sim.frames[-1:];sim.rows[:]=sim.rows[-1:]
             time.sleep(max(0.,1/60-(time.perf_counter()-start)))
